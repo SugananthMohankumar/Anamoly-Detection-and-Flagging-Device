@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anomaly Detector - Smart Surveillance Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              dark: '#111827',
+              navy: '#0f172a',
+              card: '#1e293b',
+              green: '#10b981',
+              purple: '#8b5cf6',
+              amber: '#f59e0b',
+              rose: '#ef4444'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- ONNX Runtime Web (WebGPU & WASM) for YOLO11 -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <script>
+    // Point ONNX Runtime Web WASM binaries to CDN
+    if (window.ort && ort.env && ort.env.wasm) {
+      ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
+    }
+  </script>
+  <!-- TensorFlow.js Core & Converter for YAMNet Audio Model -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <!-- EmailJS Browser SDK (v4) for Step 6 Email Alerts -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <!-- Firebase Modular SDK CDN Bridge -->
+  <script type="module" src="firebase.js"></script>
+</head>
+
+<body
+  class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
+
+  <!-- ========================================================
+       FIREBASE AUTHENTICATION SCREEN (Shown when logged out)
+  ======================================================== -->
+  <div id="authScreen" class="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center p-4">
+    <div
+      class="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-8 shadow-2xl backdrop-blur-md relative overflow-hidden">
+      <!-- Background subtle glow -->
+      <div class="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none">
+      </div>
+      <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none">
+      </div>
+
+      <!-- Brand Logo & Header -->
+      <div class="text-center mb-6">
+        <div
+          class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto mb-3 shadow-lg shadow-emerald-500/10">
+          <i data-lucide="shield-alert" class="w-6 h-6"></i>
+        </div>
+        <h2 class="text-xl font-bold tracking-tight text-white flex items-center justify-center gap-1.5">
+          Anomaly Detector
+          <span
+            class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">v2.0</span>
+        </h2>
+        <p class="text-xs text-slate-400 mt-1">Smart Anomaly Surveillance & Cloud Alert System</p>
+      </div>
+
+      <!-- Auth Tabs: Log In vs Sign Up -->
+      <div class="flex rounded-xl bg-slate-950 p-1 mb-5 border border-slate-800">
+        <button type="button" id="tabLoginBtn" onclick="switchAuthTab('login')"
+          class="flex-1 py-2 text-xs font-bold rounded-lg transition bg-emerald-500 text-slate-950">
+          Log In
+        </button>
+        <button type="button" id="tabSignupBtn" onclick="switchAuthTab('signup')"
+          class="flex-1 py-2 text-xs font-bold rounded-lg transition text-slate-400 hover:text-white">
+          Sign Up
+        </button>
+      </div>
+
+      <!-- Auth Form -->
+      <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+        <!-- Error / Info Message Box -->
+        <div id="authErrorMsg"
+          class="hidden text-xs p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 flex items-start gap-2">
+          <i data-lucide="alert-circle" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+          <span id="authErrorText">Invalid credentials</span>
+        </div>
+        <div id="authSuccessMsg"
+          class="hidden text-xs p-3 rounded-xl bg-emerald-950/60 border border-emerald-800 text-emerald-300 flex items-start gap-2">
+          <i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+          <span id="authSuccessText">Success</span>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">Email address</label>
+          <div class="relative">
+            <i data-lucide="mail" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="email" id="authEmail" required autocomplete="email" placeholder="owner@surveillance.net"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-xs font-semibold text-slate-300">Password</label>
+            <button type="button" id="forgotPasswordBtn" onclick="handleForgotPassword()"
+              class="text-[11px] text-emerald-400 hover:underline">
+              Forgot password?
+            </button>
+          </div>
+          <div class="relative">
+            <i data-lucide="lock" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="password" id="authPassword" required autocomplete="current-password" placeholder="••••••••"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
+        <button type="submit" id="authSubmitBtn"
+          class="w-full mt-2 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center justify-center space-x-2 transition shadow-lg shadow-emerald-500/20 active:scale-95">
+          <span id="authSubmitBtnText">Log In to Dashboard</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </form>
+
+      <div class="mt-6 text-center text-[11px] text-slate-500">
+        Protected by Firebase Authentication &amp; Google Cloud Firestore
+      </div>
+    </div>
+  </div>
+
+  <!-- Offline Banner Indicator (Hidden by default, shown when offline or Firestore write fails) -->
+  <div id="offlineIndicator"
+    class="hidden bg-amber-500 text-slate-950 px-4 py-1.5 text-xs font-bold text-center sticky top-0 z-[60] flex items-center justify-center gap-2 shadow-md">
+    <i data-lucide="wifi-off" class="w-3.5 h-3.5"></i>
+    <span>Offline: alerts not saved to cloud (queued in memory, will sync when reconnected)</span>
+  </div>
+
+  <!-- MAIN APP CONTAINER (Gated behind Firebase Auth; hidden until authenticated) -->
+  <div id="dashboardAppContainer" class="hidden">
+
+    <!-- Active Alert Banner (Hidden by default, supports Caution yellow / Danger red) -->
+    <div id="alertBanner"
+      class="hidden animate-slide-down bg-rose-600 text-white px-4 py-3 shadow-lg sticky top-0 z-50 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <span id="alertBannerIconBox" class="p-1.5 bg-rose-700 rounded-full animate-bounce">
+          <i data-lucide="alert-triangle" id="alertBannerIcon" class="w-5 h-5 text-white"></i>
+        </span>
+        <div>
+          <span id="alertBannerBadge"
+            class="font-bold uppercase tracking-wider text-xs bg-rose-800 px-2 py-0.5 rounded">Critical Alert</span>
+          <span class="ml-2 font-medium text-sm" id="alertBannerText">Anomaly detected: Human presence within 38
+            cm</span>
+          <span id="alertBannerDeviceWarning" class="hidden ml-2 font-bold text-xs bg-black/40 text-amber-300 border border-amber-400/60 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+            <i data-lucide="alert-circle" class="w-3 h-3 text-amber-400"></i>
+            <span>Device buzzer not connected</span>
+          </span>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <!-- Silence Alarm Button for Continuous Alarm -->
+        <button id="silenceAlarmBtn" onclick="silenceContinuousAlarm()"
+          class="hidden text-xs bg-white text-rose-700 hover:bg-rose-50 px-3.5 py-1.5 rounded-lg font-bold shadow-md transition flex items-center gap-1.5 animate-pulse">
+          <i data-lucide="volume-x" class="w-4 h-4"></i>
+          <span>Silence Alarm</span>
+        </button>
+        <button id="alertDismissBtn" onclick="dismissAlertBanner()"
+          class="text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg font-semibold transition">
+          Dismiss
+        </button>
+        <button onclick="dismissAlertBanner()" class="text-white/80 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- TOP HERO HEADER (Dark style matching screenshot) -->
+    <header class="bg-[#101828] text-white pt-4 pb-20 px-4 sm:px-8 border-b border-slate-800">
+      <div class="max-w-7xl mx-auto">
+        <!-- Navbar -->
+        <div class="flex items-center justify-between pb-6 border-b border-slate-800/80">
+          <!-- Logo & Title -->
+          <div class="flex items-center space-x-8">
+            <div class="flex items-center space-x-3">
+              <div
+                class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <i data-lucide="shield-alert" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <span class="font-bold text-lg tracking-tight flex items-center gap-1.5">
+                  Anomaly Detector
+                  <span
+                    class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">v2.0</span>
+                </span>
+                <p class="text-[11px] text-slate-400 hidden sm:block">Anomaly Detection and Flagging Device</p>
+              </div>
+            </div>
+
+            <!-- Nav Links -->
+            <nav class="hidden md:flex items-center space-x-1 text-sm font-medium text-slate-300">
+              <a href="#dashboard"
+                class="px-3.5 py-1.5 rounded-lg bg-slate-800 text-white font-semibold flex items-center space-x-2">
+                <i data-lucide="layout-dashboard" class="w-4 h-4 text-emerald-400"></i>
+                <span>Dashboard</span>
+              </a>
+              <a href="#alerts"
+                class="px-3.5 py-1.5 rounded-lg hover:text-white hover:bg-slate-800/50 transition">Alerts</a>
+              <a href="#devices"
+                class="px-3.5 py-1.5 rounded-lg hover:text-white hover:bg-slate-800/50 transition">Devices</a>
+              <a href="#settings" onclick="openSettingsModal()"
+                class="px-3.5 py-1.5 rounded-lg hover:text-white hover:bg-slate-800/50 transition flex items-center space-x-1.5">
+                <span>Settings</span>
+              </a>
+            </nav>
+          </div>
+
+          <!-- Right Side: Search, Controls, Profile -->
+          <div class="flex items-center space-x-3">
+            <!-- Search Box -->
+            <div class="relative hidden lg:block">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+              <input type="text" id="globalSearch" placeholder="Search anything..."
+                class="w-56 bg-slate-900 border border-slate-700/60 rounded-xl pl-9 pr-10 py-1.5 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition">
+              <span
+                class="absolute right-2.5 top-2 text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 font-mono">⌘
+                K</span>
+            </div>
+
+            <!-- Theme Toggle -->
+            <button id="themeToggleBtn" onclick="toggleDarkMode()" title="Toggle Dark/Light Mode"
+              class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition">
+              <i data-lucide="moon" id="themeIcon" class="w-4 h-4"></i>
+            </button>
+
+            <!-- Notification Bell -->
+            <button
+              class="relative p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition">
+              <i data-lucide="bell" class="w-4 h-4"></i>
+              <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+            </button>
+
+            <!-- Owner Avatar & Log out -->
+            <div class="flex items-center space-x-2.5 pl-2 border-l border-slate-800">
+              <div class="relative">
+                <div id="userAvatarLetter"
+                  class="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center font-bold text-xs text-white ring-2 ring-slate-800">
+                  U
+                </div>
+                <span
+                  class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#101828] rounded-full"></span>
+              </div>
+              <div class="hidden sm:block text-left leading-tight max-w-[130px] truncate">
+                <p class="text-xs font-semibold text-white truncate" id="ownerProfileName">User</p>
+                <p class="text-[10px] text-emerald-400 truncate" id="userEmailDisplay">Signed in</p>
+              </div>
+              <!-- Log out Button in Top Bar -->
+              <button onclick="handleLogout()" title="Log out"
+                class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-rose-400 hover:border-rose-900/50 transition">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Greeting & Quick Actions Bar -->
+        <div class="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2">
+              Hi, <span id="ownerGreetingName">Andrew</span>
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-indicator"></span>
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-400 mt-1">
+              System active • Real-time anomaly surveillance & automated ESP32 buzzer link
+            </p>
+          </div>
+
+          <!-- ESP32 & System Action Buttons -->
+          <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Web Serial Connection Button -->
+            <button id="connectSerialBtn" onclick="handleConnectSerial()"
+              class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold text-xs flex items-center space-x-2 transition shadow-lg shadow-emerald-500/20 active:scale-95">
+              <i data-lucide="cpu" class="w-4 h-4"></i>
+              <span id="serialBtnText">Connect Device</span>
+              <span id="serialStatusBadge" class="w-2 h-2 rounded-full bg-slate-900/40"></span>
+            </button>
+
+            <!-- Sensor Alert Sound Selector near Test Buzzer -->
+            <div
+              class="flex items-center space-x-1.5 bg-slate-900 border border-slate-700/70 rounded-xl px-2.5 py-1 text-xs">
+              <span class="text-slate-400 text-[11px] flex items-center gap-1">
+                <i data-lucide="radio" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span class="hidden xl:inline">Sensor Sound:</span>
+              </span>
+              <select id="sensorAlertSoundSelect" onchange="handleSensorAlertSoundChange(this.value)"
+                class="bg-transparent text-emerald-400 font-semibold focus:outline-none cursor-pointer text-xs">
+                <option value="device" class="bg-slate-900 text-slate-200">Device beep only</option>
+                <option value="laptop" class="bg-slate-900 text-slate-200">Laptop beep only</option>
+                <option value="both" class="bg-slate-900 text-slate-200">Both</option>
+                <option value="silent" class="bg-slate-900 text-slate-200">Silent</option>
+              </select>
+            </div>
+
+            <!-- Alarm Output Selector near Test Buzzer -->
+            <div
+              class="flex items-center space-x-1.5 bg-slate-900 border border-slate-700/70 rounded-xl px-2.5 py-1 text-xs">
+              <span class="text-slate-400 text-[11px] flex items-center gap-1">
+                <i data-lucide="bell" class="w-3.5 h-3.5 text-amber-400"></i>
+                <span class="hidden xl:inline">Alarm:</span>
+              </span>
+              <select id="alarmOutputSelect" onchange="handleAlarmOutputChange(this.value)"
+                class="bg-transparent text-emerald-400 font-semibold focus:outline-none cursor-pointer text-xs">
+                <option value="device" class="bg-slate-900 text-slate-200">Device buzzer only</option>
+                <option value="laptop" class="bg-slate-900 text-slate-200">Laptop only</option>
+                <option value="both" class="bg-slate-900 text-slate-200">Both</option>
+              </select>
+              <span id="alarmDeviceWarningBadge"
+                class="hidden text-[10px] text-amber-400 font-medium px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/80">
+                Device not connected
+              </span>
+            </div>
+
+            <!-- Test Buzzer Button -->
+            <button id="testBuzzerBtn" onclick="handleTestBuzzer()"
+              class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-medium text-xs flex items-center space-x-1.5 transition active:scale-95">
+              <i data-lucide="volume-2" class="w-4 h-4 text-amber-400"></i>
+              <span>Test Buzzer</span>
+            </button>
+
+            <!-- PIR Buzzer Toggle Switch (Near Test Buzzer) -->
+            <div
+              class="flex items-center space-x-2 bg-slate-900 border border-slate-700/70 rounded-xl px-3 py-1.5 text-xs">
+              <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span id="pirBuzzerLabelDashboard" class="font-semibold text-slate-200 text-xs">PIR buzzer: ON</span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="pirBuzzerToggleDashboard" onchange="togglePirBuzzer(this.checked)"
+                  class="sr-only peer" checked>
+                <div
+                  class="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3.5 after:transition-all peer-checked:bg-emerald-500">
+                </div>
+              </label>
+            </div>
+
+            <!-- Device Status Chip -->
+            <div
+              class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300">
+              <span class="text-slate-400">Baud:</span>
+              <span class="font-mono text-emerald-400 font-semibold">115200</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-8 -mt-12 pb-16 space-y-6">
+
+      <!-- ROW 1: 4 STAT CARDS (Floating White Card Bar matching screenshot) -->
+      <div
+        class="soft-card rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xl shadow-slate-900/5">
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-slate-800">
+
+          <!-- Stat 1: Alerts today -->
+          <div class="pt-4 sm:pt-0 sm:px-4 first:px-0">
+            <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Alerts Today
+            </p>
+            <div class="mt-2 flex items-baseline space-x-3">
+              <span class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white"
+                id="statAlertsToday">24</span>
+            </div>
+            <div class="mt-2 flex items-center text-xs font-medium text-emerald-600 dark:text-emerald-400 space-x-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span>+12.5% vs yesterday</span>
+            </div>
+          </div>
+
+          <!-- Stat 2: Motion events -->
+          <div class="pt-4 sm:pt-0 sm:px-4">
+            <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Motion Events
+            </p>
+            <div class="mt-2 flex items-baseline space-x-3">
+              <span class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white"
+                id="statMotionEvents">18</span>
+            </div>
+            <div class="mt-2 flex items-center text-xs font-medium text-emerald-600 dark:text-emerald-400 space-x-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span>+8.2% vs yesterday</span>
+            </div>
+          </div>
+
+          <!-- Stat 3: Objects detected -->
+          <div class="pt-4 sm:pt-0 sm:px-4">
+            <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Objects
+              Detected</p>
+            <div class="mt-2 flex items-baseline space-x-3">
+              <span class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white"
+                id="statObjectsDetected">9</span>
+            </div>
+            <div class="mt-2 flex items-center text-xs font-medium text-rose-500 dark:text-rose-400 space-x-1">
+              <i data-lucide="trending-down" class="w-3.5 h-3.5"></i>
+              <span>-4.1% vs yesterday</span>
+            </div>
+          </div>
+
+          <!-- Stat 4: Sound alerts -->
+          <div class="pt-4 sm:pt-0 sm:px-4">
+            <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sound Alerts
+            </p>
+            <div class="mt-2 flex items-baseline space-x-3">
+              <span class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white"
+                id="statSoundAlerts">3</span>
+            </div>
+            <div class="mt-2 flex items-center text-xs font-medium text-emerald-600 dark:text-emerald-400 space-x-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span>+2.0% vs yesterday</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ROW 2: MIDDLE 3 CARDS (2 Donut Charts + 1 Line Chart matching screenshot) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Card 1: Donut Chart "Alerts by type" (4 cols) -->
+        <div
+          class="lg:col-span-4 soft-card rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-base font-bold text-slate-900 dark:text-white">Alerts by Type</h3>
+              <p class="text-xs text-slate-400">Breakdown of flagged incidents</p>
+            </div>
+            <select id="filterAlertPeriod"
+              class="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-slate-600 dark:text-slate-300 focus:outline-none">
+              <option>All Time</option>
+              <option>Today</option>
+              <option>This Week</option>
+            </select>
+          </div>
+
+          <!-- Donut Chart Canvas with Center Number -->
+          <div class="chart-container-donut my-3">
+            <canvas id="chartAlertsByType"></canvas>
+            <div class="chart-center-badge">
+              <p class="text-2xl font-black text-slate-900 dark:text-white" id="donutTotalCount">24</p>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Total</p>
+            </div>
+          </div>
+
+          <!-- Legend Items matching screenshot style -->
+          <div class="mt-5 space-y-2.5 text-xs">
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                <span>Motion + Close Object</span>
+              </div>
+              <span class="font-bold text-slate-900 dark:text-white" id="donutCountMotion">14</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span class="w-3 h-3 rounded-full bg-purple-500"></span>
+                <span>Person Detected (Camera)</span>
+              </div>
+              <span class="font-bold text-slate-900 dark:text-white" id="donutCountPerson">7</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span class="w-3 h-3 rounded-full bg-amber-400"></span>
+                <span>Sound / Glass Break</span>
+              </div>
+              <span class="font-bold text-slate-900 dark:text-white" id="donutCountSound">3</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Donut Chart "Device status" (4 cols) -->
+        <div
+          class="lg:col-span-4 soft-card rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-base font-bold text-slate-900 dark:text-white">Device Status</h3>
+              <p class="text-xs text-slate-400">Active sensors health</p>
+            </div>
+            <span
+              class="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+              All Healthy
+            </span>
+          </div>
+
+          <!-- Donut Chart Canvas with Center Number -->
+          <div class="chart-container-donut my-3">
+            <canvas id="chartDeviceStatus"></canvas>
+            <div class="chart-center-badge">
+              <p class="text-2xl font-black text-slate-900 dark:text-white">4 / 4</p>
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Online</p>
+            </div>
+          </div>
+
+          <!-- Sensor Status List -->
+          <div class="mt-5 space-y-2.5 text-xs">
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>PIR Motion Sensor</span>
+              </div>
+              <span class="font-medium text-emerald-600 dark:text-emerald-400 font-mono text-[11px]">READY</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Ultrasonic Distance (DIST)</span>
+              </div>
+              <span class="font-medium text-emerald-600 dark:text-emerald-400 font-mono text-[11px]">ACTIVE</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span>Web Camera (COCO-SSD)</span>
+              </div>
+              <span class="font-medium text-emerald-600 dark:text-emerald-400 font-mono text-[11px]">STANDBY</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span id="deviceStatusMicDot" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                <span>Microphone (YAMNet)</span>
+              </div>
+              <span id="deviceStatusMicText"
+                class="font-medium text-slate-500 dark:text-slate-400 font-mono text-[11px]">STANDBY</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Line Chart "Activity over time" (4 cols) -->
+        <div
+          class="lg:col-span-4 soft-card rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">Activity Over Time</h3>
+                <p class="text-xs text-slate-400">Past 24 hours sensor triggers</p>
+              </div>
+              <span class="text-[11px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">Hourly</span>
+            </div>
+
+            <!-- Chart Legend Pills -->
+            <div class="flex items-center space-x-4 my-2 text-xs">
+              <div class="flex items-center space-x-1.5">
+                <span class="w-3 h-1 bg-emerald-500 rounded"></span>
+                <span class="text-slate-500 dark:text-slate-400">Motion Events</span>
+              </div>
+              <div class="flex items-center space-x-1.5">
+                <span class="w-3 h-1 bg-purple-500 rounded"></span>
+                <span class="text-slate-500 dark:text-slate-400">Distance Alerts</span>
+              </div>
+            </div>
+
+            <!-- Line Chart Canvas -->
+            <div class="h-48 w-full mt-2">
+              <canvas id="chartActivityOverTime"></canvas>
+            </div>
+          </div>
+
+          <div
+            class="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 flex justify-between items-center">
+            <span>Peak activity: 14:00 - 18:00</span>
+            <span class="text-emerald-500 font-semibold">Normal baseline</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ROW 3: LIVE HARDWARE & AI SENSORS ROW (Camera Feed + ESP32 Telemetry + Sound Meter) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6" id="devices">
+
+        <!-- Card A: Live Camera Feed with AI Detection (5 cols) -->
+        <div
+          class="lg:col-span-5 soft-card rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center space-x-2.5">
+                <div class="p-2 bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 rounded-xl">
+                  <i data-lucide="video" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    Camera AI Feed
+                    <span
+                      class="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">YOLO11
+                      + Vision AI</span>
+                  </h3>
+                  <p class="text-xs text-slate-400">Layer 1: YOLO11 (WebGPU/WASM) • Layer 2: Gemini Vision</p>
+                </div>
+              </div>
+              <span id="cameraStatusBadge"
+                class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                Camera Off
+              </span>
+            </div>
+
+            <!-- Video Viewport / Canvas Container -->
+            <div
+              class="relative w-full aspect-video bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
+              <video id="webcamVideo" autoplay playsinline muted class="hidden w-full h-full object-cover"></video>
+              <canvas id="detectionCanvas"
+                class="hidden absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
+
+              <!-- Placeholder when camera is off -->
+              <div id="cameraPlaceholder" class="text-center p-6 space-y-3">
+                <div
+                  class="w-12 h-12 mx-auto rounded-full bg-slate-900 flex items-center justify-center text-slate-600">
+                  <i data-lucide="camera-off" class="w-6 h-6"></i>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold text-slate-300">Camera Feed Inactive</p>
+                  <p class="text-[11px] text-slate-500 max-w-xs mt-0.5">Click "Start Camera" to enable AI real-time
+                    person anomaly detection.</p>
+                </div>
+              </div>
+
+              <!-- Permission Denied / Error Notice -->
+              <div id="cameraErrorBox"
+                class="hidden text-center p-6 space-y-2 bg-rose-950/80 border border-rose-800 rounded-xl mx-4">
+                <i data-lucide="alert-octagon" class="w-7 h-7 mx-auto text-rose-400"></i>
+                <p class="text-xs font-bold text-rose-200" id="cameraErrorMsg">Camera permission denied</p>
+                <p class="text-[11px] text-rose-300">Please enable camera permission in your browser URL bar and try
+                  again.</p>
+              </div>
+
+              <!-- Live Detection HUD Overlay -->
+              <div id="cameraHud"
+                class="hidden absolute top-3 left-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10 text-white text-[11px] flex items-center space-x-2">
+                <span id="cameraHudDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span id="hudPersonStatus">AI Ready</span>
+              </div>
+            </div>
+
+            <!-- Layer 2 Vision AI Badge & Feedback Indicator -->
+            <div
+              class="mt-2 flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-800">
+              <span class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-400"></i>
+                <span>Layer 2 Vision AI:</span>
+              </span>
+              <div class="flex items-center space-x-2">
+                <span id="visionAiStatusIndicator"
+                  class="font-medium text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                  <span>Ready</span>
+                </span>
+                <button onclick="testGeminiVisionAi()" id="testVisionAiBtn"
+                  class="px-2 py-0.5 rounded bg-indigo-500 hover:bg-indigo-600 text-white font-semibold text-[10px] transition active:scale-95 flex items-center gap-1">
+                  <i data-lucide="play" class="w-2.5 h-2.5"></i>
+                  <span>Test AI check</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- YOLO11 & AI Real-Time Debug Panel -->
+            <div
+              class="mt-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-300 space-y-1.5">
+              <div class="flex items-center justify-between border-b border-slate-800/80 pb-1 text-slate-400">
+                <span class="flex items-center gap-1 font-bold text-emerald-400">
+                  <i data-lucide="terminal" class="w-3 h-3"></i>
+                  DEBUG PANEL (YOLO11 & VISION AI)
+                </span>
+                <span id="debugBackendBadge" class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">Backend:
+                  WASM</span>
+              </div>
+              <div class="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-400">
+                <div>Model Loaded: <span id="debugModelLoaded" class="font-bold text-rose-400">No</span></div>
+                <div>Inference: <span id="debugInferenceTime" class="font-bold text-slate-200">0 ms</span></div>
+                <div>Input Name: <span id="debugInputName" class="font-bold text-slate-200">-</span></div>
+                <div>Output Name: <span id="debugOutputName" class="font-bold text-slate-200">-</span></div>
+                <div>Tensor Shape: <span id="debugOutputShape" class="font-bold text-emerald-400">-</span></div>
+                <div>Highest Score: <span id="debugHighestScore" class="font-bold text-amber-400">0.00</span></div>
+                <div>Raw Detections: <span id="debugRawDetectionsCount" class="font-bold text-slate-200">0</span></div>
+                <div>Filtered Confirmed: <span id="debugConfirmedCount" class="font-bold text-slate-200">0</span></div>
+              </div>
+              <!-- Audio Sensor Live Debug Line -->
+              <div class="border-t border-slate-800/80 pt-1 text-[9.5px]">
+                <span class="text-slate-400">Audio (YAMNet): </span>
+                <span id="debugAudioInfo" class="text-amber-300 font-semibold">Mic Inactive • 0 dB</span>
+              </div>
+              <div class="border-t border-slate-800/80 pt-1 text-[9.5px]">
+                <span class="text-slate-400">Top Raw Detections: </span>
+                <span id="debugTopDetections" class="text-amber-400 italic">None</span>
+              </div>
+              <!-- Gemini Vision Model List & Active Model -->
+              <div class="border-t border-slate-800/80 pt-1 text-[9.5px]">
+                <span class="text-slate-400">Gemini Model: </span>
+                <span id="debugGeminiModelName" class="text-indigo-400 font-semibold">Auto-detecting...</span>
+              </div>
+              <div class="text-[9px] text-slate-500 truncate" id="debugGeminiAvailableModels">
+                Available: Loading...
+              </div>
+              <!-- Email Alerts Status Line (Step 6) -->
+              <div class="border-t border-slate-800/80 pt-1 text-[9.5px] flex items-center justify-between">
+                <span class="text-slate-400">Email Alerts: </span>
+                <span id="debugEmailAlertsStatus" class="text-emerald-400 font-semibold">Active</span>
+              </div>
+              <!-- Danger Buzzer Live Debug Line -->
+              <div class="border-t border-slate-800/80 pt-1 text-[9.5px]">
+                <span class="text-slate-400">Buzzer Link: </span>
+                <span id="debugBuzzerStatus" class="text-emerald-400 font-mono">Idle</span>
+              </div>
+              <!-- Test AI Raw Output container -->
+              <div id="debugAiRawOutput"
+                class="hidden border-t border-slate-800/80 pt-1 text-[9px] text-indigo-300 break-all"></div>
+            </div>
+
+            <!-- Live Detected Objects Pill List -->
+            <div class="mt-2.5">
+              <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1.5">
+                <span>Objects in view:</span>
+                <span id="detectedObjectsCount" class="font-mono text-emerald-500 font-semibold">0</span>
+              </div>
+              <div id="detectedObjectsList" class="flex flex-wrap gap-1.5 min-h-[26px]">
+                <span class="text-[11px] text-slate-400 italic">None detected</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div class="text-[11px] text-slate-500 leading-tight">
+              <span>Person &gt; 60% = Caution</span><br>
+              <span class="text-rose-500 font-semibold">Harmful object = Danger</span>
+            </div>
+            <div class="space-x-2">
+              <button id="toggleCameraBtn" onclick="toggleCamera()"
+                class="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium text-xs transition active:scale-95 flex items-center gap-1.5">
+                <i data-lucide="video" class="w-3.5 h-3.5"></i>
+                <span id="cameraBtnLabel">Start Camera</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card B: ESP32 Hardware Telemetry (4 cols) -->
+        <div
+          class="lg:col-span-4 soft-card rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center space-x-2.5">
+                <div class="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                  <i data-lucide="cpu" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900 dark:text-white">ESP32 Hardware</h3>
+                  <p class="text-xs text-slate-400">Live Serial Data (PIR & DIST)</p>
+                </div>
+              </div>
+              <span id="esp32ConnBadge"
+                class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                Disconnected
+              </span>
+            </div>
+
+            <!-- Live Metrics Gauges -->
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <!-- Distance Display -->
+              <div
+                class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <div class="flex items-center justify-between text-slate-500 text-[11px] mb-1">
+                  <span>Distance</span>
+                  <i data-lucide="ruler" class="w-3.5 h-3.5"></i>
+                </div>
+                <div class="flex items-baseline space-x-1">
+                  <span class="text-2xl font-black text-slate-900 dark:text-white" id="liveDistValue">72</span>
+                  <span class="text-xs font-semibold text-slate-400">cm</span>
+                </div>
+                <div class="mt-2 w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                  <div id="distProgressBar" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
+                    style="width: 72%;"></div>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-1">Alert threshold: &lt; 50 cm</p>
+              </div>
+
+              <!-- PIR Motion Sensor Display -->
+              <div
+                class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <div class="flex items-center justify-between text-slate-500 text-[11px] mb-1">
+                  <span>PIR Motion</span>
+                  <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+                </div>
+                <div class="mt-1 flex items-center space-x-2">
+                  <span id="pirIndicatorLight" class="w-3 h-3 rounded-full bg-slate-400"></span>
+                  <span class="text-sm font-bold text-slate-900 dark:text-white" id="livePirValue">PIR: 0 (No
+                    Motion)</span>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-3">1 = Motion Triggered</p>
+              </div>
+            </div>
+
+            <!-- Raw Serial Stream Terminal & Debug Box -->
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs space-y-2">
+              <div class="flex items-center justify-between text-slate-400 text-[10px] pb-1 border-b border-slate-800">
+                <span class="flex items-center gap-1.5 font-bold text-emerald-400">
+                  <i data-lucide="terminal" class="w-3 h-3"></i>
+                  SERIAL DEBUG PANEL
+                </span>
+                <span class="flex items-center gap-2">
+                  <span class="text-slate-400">Lines: <span id="serialLinesCount"
+                      class="text-emerald-400 font-bold">0</span></span>
+                  <span
+                    class="text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60">115200</span>
+                </span>
+              </div>
+
+              <!-- Inactivity Warning Banner (3s) -->
+              <div id="serialInactivityWarning"
+                class="hidden px-2 py-1 rounded bg-amber-950/80 border border-amber-800 text-amber-300 text-[10.5px] flex items-center justify-between animate-pulse">
+                <span class="flex items-center gap-1">
+                  <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+                  ⚠️ No data received for 3 seconds
+                </span>
+                <span class="text-[9.5px] text-amber-400 underline cursor-pointer" onclick="handleConnectSerial()">Check
+                  Link</span>
+              </div>
+
+              <!-- Error Log Banner -->
+              <div id="serialErrorLog"
+                class="hidden px-2 py-1 rounded bg-rose-950/80 border border-rose-800 text-rose-300 text-[10px] break-all">
+              </div>
+
+              <!-- Last 10 Raw Lines Window -->
+              <div>
+                <div class="text-[10px] text-slate-500 mb-0.5">Last 10 Raw Lines Received:</div>
+                <div id="serialDebugLogWindow"
+                  class="bg-black/60 rounded p-1.5 text-[10px] text-emerald-300/90 font-mono space-y-0.5 max-h-28 overflow-y-auto border border-slate-900 leading-tight">
+                  <div class="text-slate-600 italic">No serial lines received yet. Click "Connect Device" to begin.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sensor Rule & Telemetry Status Box (Step 7 Rule 8) -->
+              <div class="pt-1.5 border-t border-slate-800 text-[10px] font-mono space-y-0.5">
+                <div class="flex items-center justify-between text-slate-400">
+                  <span>Last Reading: <span id="debugSensorReading" class="text-emerald-400 font-bold">DIST: -- cm | PIR: 0</span></span>
+                  <span id="debugSensorStateBadge" class="px-1.5 py-0.2 rounded text-[9px] bg-slate-800 text-slate-400">Idle</span>
+                </div>
+                <div class="text-slate-300">
+                  <span class="text-slate-500">Sensor Rule:</span> <span id="debugSensorRuleStatus" class="text-amber-300">Waiting for data...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <span class="text-xs text-slate-400">Buzzer trigger on alert</span>
+            <button onclick="handleTestBuzzer()"
+              class="text-xs text-amber-600 dark:text-amber-400 hover:underline font-semibold flex items-center space-x-1">
+              <i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>
+              <span>Test Sound</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Card C: Live Sound Level & Audio Anomaly (3 cols) -->
+        <div
+          class="lg:col-span-3 soft-card rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center space-x-2.5">
+                <div class="p-2 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl">
+                  <i data-lucide="mic" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    Audio Sensor
+                    <span
+                      class="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">YAMNet
+                      16kHz</span>
+                  </h3>
+                  <p class="text-xs text-slate-400">Glass Break & Loud Noise</p>
+                </div>
+              </div>
+              <span id="micStatusBadge"
+                class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                Mic Off
+              </span>
+            </div>
+
+            <!-- Sound Level Visualizer Canvas -->
+            <div
+              class="h-28 bg-slate-950 rounded-xl border border-slate-800 p-2 flex flex-col justify-between relative overflow-hidden">
+              <canvas id="audioVisualizerCanvas" class="w-full h-16"></canvas>
+              <div
+                class="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/80">
+                <span>Level: <span id="soundLevelText" class="text-emerald-400 font-mono font-bold">-60
+                    dBFS</span></span>
+                <span class="text-amber-400 text-[10px]" id="soundPeakText">Peak: -60 dB</span>
+              </div>
+            </div>
+
+            <!-- Permission Denied Box for Mic -->
+            <div id="micErrorBox"
+              class="hidden mt-2 p-2.5 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs space-y-1">
+              <div class="font-bold flex items-center gap-1.5">
+                <i data-lucide="alert-octagon" class="w-3.5 h-3.5 text-rose-400"></i>
+                <span>Microphone Access Denied</span>
+              </div>
+              <p class="text-[10.5px] text-rose-300" id="micErrorMsg">Please allow microphone access in your browser.
+              </p>
+            </div>
+
+            <!-- Live Top 3 Sounds Heard -->
+            <div class="mt-3">
+              <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                <span>Top sounds heard:</span>
+                <span id="micYAMNetStatus" class="text-[10px] text-slate-400 font-mono">Model Idle</span>
+              </div>
+              <div id="topSoundsList"
+                class="space-y-1 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl border border-slate-100 dark:border-slate-800 text-xs">
+                <div class="text-[11px] text-slate-400 italic">Microphone inactive</div>
+              </div>
+            </div>
+
+            <!-- Detection criteria badge -->
+            <div
+              class="mt-2.5 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 text-xs">
+              <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px]">
+                <span>Sensitivity:</span>
+                <span class="font-semibold text-amber-500 font-mono" id="micSensitivityBadge">Medium</span>
+              </div>
+              <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
+                <span>Status:</span>
+                <span class="font-medium text-emerald-500" id="soundStatusText">Quiet / Normal</span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+            <button onclick="simulateGlassBreakAlarm()" id="testGlassBtn"
+              class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition active:scale-95 flex items-center gap-1">
+              <i data-lucide="bell" class="w-3.5 h-3.5 text-rose-500"></i>
+              <span>Test glass alarm</span>
+            </button>
+
+            <button id="toggleMicBtn" onclick="toggleMicrophone()"
+              class="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs transition active:scale-95 flex items-center gap-1.5">
+              <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+              <span id="micBtnText">Start Mic</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ROW 4: RECENT ALERTS TABLE (Matching bottom section of screenshot) -->
+      <div class="soft-card rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
+        id="alerts">
+
+        <!-- Table Header & Controls -->
+        <div
+          class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              Recent Alerts
+              <span
+                class="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full font-semibold"
+                id="tableTotalBadge">
+                24 total
+              </span>
+            </h3>
+            <p class="text-xs text-slate-400">Automated log of all detected anomalous events</p>
+          </div>
+
+          <!-- Search & Filter Controls -->
+          <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Table Search Input -->
+            <div class="relative">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5"></i>
+              <input type="text" id="alertTableSearch" oninput="filterAlertTable()" placeholder="Search alerts..."
+                class="w-48 sm:w-56 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-emerald-500">
+            </div>
+
+            <!-- Filter: Type -->
+            <select id="filterType" onchange="filterAlertTable()"
+              class="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none">
+              <option value="ALL">All Types</option>
+              <option value="Motion + Close Object">Motion + Close Object</option>
+              <option value="Close Object Detected">Close Object Detected</option>
+              <option value="PIR Motion Detected">PIR Motion Detected</option>
+              <option value="Person Detected">Person Detected</option>
+              <option value="Glass Break / Loud Sound">Glass Break / Sound</option>
+            </select>
+
+            <!-- Filter: Source -->
+            <select id="filterSource" onchange="filterAlertTable()"
+              class="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none">
+              <option value="ALL">All Sources</option>
+              <option value="PIR">PIR</option>
+              <option value="Ultrasonic">Ultrasonic</option>
+              <option value="Camera">Camera</option>
+              <option value="Microphone">Microphone</option>
+            </select>
+
+            <!-- Filter: Severity -->
+            <select id="filterSeverity" onchange="filterAlertTable()"
+              class="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none">
+              <option value="ALL">All Severities</option>
+              <option value="Danger">Danger</option>
+              <option value="Caution">Caution</option>
+            </select>
+
+            <!-- Filter: Status -->
+            <select id="filterStatus" onchange="filterAlertTable()"
+              class="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none">
+              <option value="ALL">All Status</option>
+              <option value="Critical">Critical</option>
+              <option value="Warning">Warning</option>
+              <option value="Resolved">Resolved</option>
+            </select>
+
+            <!-- Clear History Button -->
+            <button onclick="handleClearAlertHistory()" id="clearHistoryBtn" title="Clear all saved alerts"
+              class="text-xs px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-300 font-semibold transition flex items-center gap-1.5 active:scale-95">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Clear history</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Alerts Table Responsive Container -->
+        <div class="overflow-x-auto mt-4">
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr
+                class="text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800 font-semibold uppercase tracking-wider text-[11px]">
+                <th class="py-3 px-4">Time</th>
+                <th class="py-3 px-4">Severity</th>
+                <th class="py-3 px-4">Type</th>
+                <th class="py-3 px-4">Source</th>
+                <th class="py-3 px-4">Distance</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="alertsTableBody"
+              class="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
+              <!-- Table rows populated dynamically by app.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination / Footer Info -->
+        <div
+          class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
+          <span id="tableShowingCount">Showing 5 of 24 records</span>
+          <div class="flex items-center space-x-1">
+            <button
+              class="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-xs font-medium">Prev</button>
+            <button class="px-2.5 py-1 rounded bg-emerald-500 text-white text-xs font-semibold">1</button>
+            <button
+              class="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-xs font-medium">2</button>
+            <button
+              class="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-xs font-medium">Next</button>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div> <!-- /dashboardAppContainer -->
+
+  <!-- Connect Device Modal (Explaining Serial Connection for Chrome/Edge) -->
+  <div id="connectModal"
+    class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div
+      class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <h4 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="cpu" class="w-5 h-5 text-emerald-500"></i>
+          Connect ESP32 via Web Serial
+        </h4>
+        <button onclick="closeConnectModal()" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="py-4 space-y-3 text-xs text-slate-600 dark:text-slate-300">
+        <p class="leading-relaxed">
+          The Web Serial API enables this web dashboard to talk directly with your ESP32 microcontroller plugged in via
+          USB.
+        </p>
+        <div
+          class="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl space-y-1.5 border border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Baud Rate:</span>
+            <span class="font-mono font-bold text-emerald-500">115200</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Expected Feed:</span>
+            <span class="font-mono text-slate-700 dark:text-slate-200">PIR:0,DIST:72</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Buzzer Command:</span>
+            <span class="font-mono text-amber-500">BUZZ\n</span>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-400">
+          * Please ensure your ESP32 is plugged in and no Arduino Serial Monitor window is holding the COM port open.
+        </p>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeConnectModal()"
+          class="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold">
+          Cancel
+        </button>
+        <button onclick="requestSerialPort()"
+          class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center space-x-1.5">
+          <i data-lucide="plug" class="w-4 h-4"></i>
+          <span>Select Port & Connect</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal (Includes Alarm Output & Device Preferences) -->
+  <div id="settingsModal"
+    class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div
+      class="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <h4 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="settings" class="w-5 h-5 text-emerald-500"></i>
+          System Settings
+        </h4>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="py-4 space-y-4 text-xs text-slate-600 dark:text-slate-300">
+        <!-- Setting: Sensor Alert Sound -->
+        <div class="space-y-2">
+          <label class="block font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
+            <i data-lucide="radio" class="w-4 h-4 text-emerald-500"></i>
+            Sensor Alert Sound (PIR &amp; Distance)
+          </label>
+          <p class="text-slate-500 dark:text-slate-400 text-xs">
+            Sound for PIR motion, close distance (&lt; 50 cm), and both together. Makes exactly ONE short beep (~150ms):
+          </p>
+
+          <!-- 4-option Segmented Selector -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl" id="settingsSensorSoundGroup">
+            <button type="button" onclick="setSensorAlertSound('device')" id="optSensorSoundDevice"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="cpu" class="w-4 h-4"></i>
+              <span>Device beep only</span>
+            </button>
+            <button type="button" onclick="setSensorAlertSound('laptop')" id="optSensorSoundLaptop"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="laptop" class="w-4 h-4"></i>
+              <span>Laptop beep only</span>
+            </button>
+            <button type="button" onclick="setSensorAlertSound('both')" id="optSensorSoundBoth"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="volume-2" class="w-4 h-4"></i>
+              <span>Both</span>
+            </button>
+            <button type="button" onclick="setSensorAlertSound('silent')" id="optSensorSoundSilent"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="bell-off" class="w-4 h-4"></i>
+              <span>Silent</span>
+            </button>
+          </div>
+          <p class="text-[10px] text-slate-400">
+            * Default: Device beep only (sends BEEP\n to ESP32; laptop stays silent). Max 1 beep every 3s.
+          </p>
+        </div>
+
+        <!-- Setting: Alarm output -->
+        <div class="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <label class="block font-bold text-slate-800 dark:text-slate-200 text-sm">
+            Alarm Output
+          </label>
+          <p class="text-slate-500 dark:text-slate-400 text-xs">
+            General alarm channel for sensor triggers & manual tests:
+          </p>
+
+          <!-- 3-option Segmented Selector -->
+          <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl" id="settingsAlarmGroup">
+            <button type="button" onclick="setAlarmOutput('device')" id="optAlarmDevice"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="cpu" class="w-4 h-4"></i>
+              <span>Device only</span>
+            </button>
+            <button type="button" onclick="setAlarmOutput('laptop')" id="optAlarmLaptop"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="laptop" class="w-4 h-4"></i>
+              <span>Laptop only</span>
+            </button>
+            <button type="button" onclick="setAlarmOutput('both')" id="optAlarmBoth"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="volume-2" class="w-4 h-4"></i>
+              <span>Both</span>
+            </button>
+          </div>
+
+          <!-- Explanatory note -->
+          <div id="settingsWarningNotice"
+            class="hidden p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[11px] flex items-center gap-2">
+            <i data-lucide="alert-circle" class="w-4 h-4 flex-shrink-0"></i>
+            <span>Device not connected. Connect your ESP32 via USB using "Connect Device" to trigger the physical
+              buzzer.</span>
+          </div>
+        </div>
+
+        <!-- Setting: PIR Buzzer Toggle -->
+        <div class="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <div>
+              <label class="block font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
+                <i data-lucide="bell" class="w-4 h-4 text-emerald-500"></i>
+                PIR Motion Buzzer
+              </label>
+              <p class="text-slate-500 dark:text-slate-400 text-xs">
+                Sound buzzer when human motion alone is detected (PIR 0 &rarr; 1):
+              </p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span id="pirBuzzerLabelSettings" class="text-xs font-bold text-slate-700 dark:text-slate-200">PIR buzzer:
+                ON</span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="pirBuzzerToggleSettings" onchange="togglePirBuzzer(this.checked)"
+                  class="sr-only peer" checked>
+                <div
+                  class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500">
+                </div>
+              </label>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-400">
+            * When OFF, motion (0 &rarr; 1) logs Caution (Source = PIR) without sounding the buzzer.
+          </p>
+        </div>
+
+        <!-- Setting: Close Object Alert Switch & Distance Setting (Requirement 7) -->
+        <div class="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <div>
+              <label class="block font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
+                <i data-lucide="ruler" class="w-4 h-4 text-emerald-500"></i>
+                Close Object Alert
+              </label>
+              <p class="text-slate-500 dark:text-slate-400 text-xs">
+                Detect stationary/moving objects using ultrasonic sensor:
+              </p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span id="closeObjectAlertLabel" class="text-xs font-bold text-slate-700 dark:text-slate-200">Close alert: ON</span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="closeObjectAlertToggle" onchange="toggleCloseObjectAlert(this.checked)"
+                  class="sr-only peer" checked>
+                <div
+                  class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500">
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Close object distance slider / number input -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Close object distance threshold:
+              </label>
+              <span class="font-mono text-xs font-bold text-emerald-400" id="closeObjectDistanceDisplay">50 cm</span>
+            </div>
+            <div class="flex items-center space-x-3">
+              <input type="range" id="closeObjectDistanceSlider" min="10" max="200" step="5" value="50"
+                oninput="handleCloseObjectDistanceChange(this.value)"
+                class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+              <input type="number" id="closeObjectDistanceInput" min="10" max="200" value="50"
+                onchange="handleCloseObjectDistanceChange(this.value)"
+                class="w-16 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-center font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500">
+            </div>
+            <p class="text-[10px] text-slate-400">
+              Default 50 cm (Range: 10 - 200 cm). Alert triggers after 2 readings in a row under threshold, clears above +10 cm.
+            </p>
+          </div>
+        </div>
+
+        <!-- Setting: Person Alert Sound (Caution Level) -->
+        <div class="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <div>
+              <label class="block font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                Person Alert Sound (Caution Level)
+              </label>
+              <p class="text-slate-500 dark:text-slate-400 text-xs">
+                Sound behavior when a person is detected without any harmful objects:
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl"
+            id="settingsPersonSoundGroup">
+            <button type="button" onclick="setPersonAlertSound('none')" id="optPersonSoundNone"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="bell-off" class="w-4 h-4"></i>
+              <span>Alert only (no sound)</span>
+            </button>
+            <button type="button" onclick="setPersonAlertSound('device')" id="optPersonSoundDevice"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="cpu" class="w-4 h-4"></i>
+              <span>Device buzzer</span>
+            </button>
+            <button type="button" onclick="setPersonAlertSound('laptop')" id="optPersonSoundLaptop"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <i data-lucide="volume-2" class="w-4 h-4"></i>
+              <span>Laptop sound</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Setting: Mic Sensitivity -->
+        <div class="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <div>
+              <label class="block font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
+                <i data-lucide="mic" class="w-4 h-4 text-amber-500"></i>
+                Mic Sensitivity (Sound &amp; YAMNet)
+              </label>
+              <p class="text-slate-500 dark:text-slate-400 text-xs">
+                Controls confidence threshold and loudness jump for Caution/Danger audio alerts:
+              </p>
+            </div>
+          </div>
+
+          <!-- 3-option Segmented Selector for Sensitivity -->
+          <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl" id="settingsMicSensGroup">
+            <button type="button" onclick="setMicSensitivity('low')" id="optMicSensLow"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <span class="font-bold">Low</span>
+              <span class="text-[10px] text-slate-400">50% • 30 dB</span>
+            </button>
+            <button type="button" onclick="setMicSensitivity('medium')" id="optMicSensMedium"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <span class="font-bold">Medium</span>
+              <span class="text-[10px] text-slate-400">40% • 25 dB</span>
+            </button>
+            <button type="button" onclick="setMicSensitivity('high')" id="optMicSensHigh"
+              class="py-2.5 px-2 rounded-lg text-xs font-semibold text-center transition flex flex-col items-center gap-1">
+              <span class="font-bold">High</span>
+              <span class="text-[10px] text-slate-400">30% • 20 dB</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400">
+            * Default Medium. Normal speech &amp; music are automatically filtered out.
+          </p>
+        </div>
+
+        <!-- Setting: Layer 2 Gemini Vision AI API Key -->
+        <div class="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <label class="block font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
+            <i data-lucide="key" class="w-4 h-4 text-emerald-500"></i>
+            Gemini Vision AI API Key (Layer 2)
+          </label>
+          <p class="text-slate-500 dark:text-slate-400 text-xs">
+            Used when a person is detected to inspect for held weapons (knife, screwdriver, hammer, scissors, bat, gun):
+          </p>
+          <div class="flex items-center space-x-2">
+            <input type="password" id="geminiApiKeyInput" placeholder="Paste your Gemini API key (AIzaSy...)"
+              class="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-emerald-500 font-mono">
+            <button type="button" onclick="saveGeminiApiKey()"
+              class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs transition">
+              Save Key
+            </button>
+          </div>
+
+          <!-- Model Override Setting -->
+          <div class="mt-2 space-y-1">
+            <label class="block text-slate-700 dark:text-slate-300 font-semibold text-xs">
+              Gemini Model Override (Optional):
+            </label>
+            <input type="text" id="geminiModelOverrideInput"
+              placeholder="Leave empty for auto-detect (e.g. gemini-1.5-flash)"
+              class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-emerald-500 font-mono">
+            <p class="text-[10px] text-slate-400">
+              When empty, system auto-picks the first available model containing "flash" that supports generateContent.
+            </p>
+          </div>
+
+          <p class="text-[11px] text-slate-400">
+            * Saved securely in your browser's local storage. If no key is set or the call fails, system automatically
+            falls back to Layer 1 YOLO11.
+          </p>
+        </div>
+
+        <!-- Setting: Email Alerts Configuration (Step 6) -->
+        <div class="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <div>
+              <label class="block font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
+                <i data-lucide="send" class="w-4 h-4 text-emerald-500"></i>
+                Email Alerts (EmailJS)
+              </label>
+              <p class="text-slate-500 dark:text-slate-400 text-xs">
+                Send real-time security alert emails to the owner inbox:
+              </p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span id="emailAlertsToggleLabel" class="text-xs font-bold text-slate-700 dark:text-slate-200">Email
+                alerts: ON</span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="emailAlertsToggle" onchange="toggleEmailAlerts(this.checked)"
+                  class="sr-only peer" checked>
+                <div
+                  class="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500">
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Choice: Send for Danger only / Danger and Caution -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Send emails for:
+            </label>
+            <div class="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl" id="emailFilterGroup">
+              <button type="button" onclick="setEmailFilterChoice('danger_only')" id="optEmailDangerOnly"
+                class="py-2 px-3 rounded-lg text-xs font-bold text-center transition flex items-center justify-center gap-1.5 bg-rose-500 text-white shadow-sm">
+                <i data-lucide="alert-octagon" class="w-3.5 h-3.5"></i>
+                <span>Danger only</span>
+              </button>
+              <button type="button" onclick="setEmailFilterChoice('all')" id="optEmailDangerCaution"
+                class="py-2 px-3 rounded-lg text-xs font-semibold text-center transition flex items-center justify-center gap-1.5 text-slate-400 hover:text-white">
+                <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+                <span>Danger &amp; Caution</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Alert Email Input field -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <i data-lucide="at-sign" class="w-3.5 h-3.5 text-emerald-500"></i>
+              <span>Alert Email Address:</span>
+            </label>
+            <div class="flex items-center space-x-2">
+              <input type="email" id="alertEmailInput" placeholder="owner@surveillance.net"
+                class="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-emerald-500">
+              <button type="button" onclick="saveEmailSettingsToCloud()" id="saveEmailSettingsBtn"
+                class="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1 shadow-sm active:scale-95">
+                <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                <span>Save</span>
+              </button>
+            </div>
+            <p id="alertEmailSaveStatus"
+              class="hidden text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+              <i data-lucide="check" class="w-3 h-3"></i> Saved email settings to cloud profile
+            </p>
+          </div>
+
+          <!-- Test Email Action & Status Box -->
+          <div class="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <button type="button" onclick="handleSendTestEmail()" id="sendTestEmailBtn"
+              class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition active:scale-95">
+              <i data-lucide="send" class="w-3.5 h-3.5 text-indigo-400"></i>
+              <span>Send test email</span>
+            </button>
+            <div id="testEmailStatusBox"
+              class="hidden text-[11px] font-mono rounded-lg px-2.5 py-1.5 break-all max-w-full">
+              <!-- Result filled dynamically -->
+            </div>
+          </div>
+
+          <p class="text-[10px] text-slate-400">
+            * Rate limits: max 1 email per alert type per 60s, max 10 emails/hour. Free tier quota is conserved.
+          </p>
+        </div>
+
+        <!-- Serial Info Reminder -->
+        <div
+          class="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl space-y-1 border border-slate-200 dark:border-slate-700">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500">Serial Baud Rate:</span>
+            <span class="font-mono font-semibold text-slate-800 dark:text-slate-200">115200 baud</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500">Command Format:</span>
+            <span class="font-mono text-emerald-500">BUZZ\n (Alarm) • BEEP\n (Short Beep)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeSettingsModal()"
+          class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript Logic -->
+  <script src="app.js"></script>
+</body>
+
+</html>
